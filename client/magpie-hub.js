@@ -237,6 +237,7 @@ function Rank({ rows, valueOf, locale }) {
 function AgentsTab({ snapshot, locale, rpcCall, onRescan }) {
   const providers = Array.isArray(snapshot?.providers) ? snapshot.providers : [];
   const [checkinStatus, setCheckinStatus] = useState({});
+  const [loginStatus, setLoginStatus] = useState({});
 
   const doCheckin = async (providerId) => {
     if (!rpcCall) return;
@@ -251,6 +252,34 @@ function AgentsTab({ snapshot, locale, rpcCall, onRescan }) {
       setCheckinStatus((prev) => ({ ...prev, [providerId]: { busy: false, msg, bad: !!res?.failed && !res?.claimed && !res?.done } }));
     } catch (err) {
       setCheckinStatus((prev) => ({ ...prev, [providerId]: { busy: false, msg: err?.message || String(err), bad: true } }));
+    }
+  };
+
+  const doLogin = async (providerId) => {
+    if (!rpcCall) return;
+    setLoginStatus((prev) => ({ ...prev, [providerId]: { busy: true, msg: t(locale, "发起授权…", "Starting login…") } }));
+    try {
+      const res = await rpcCall("auth.signIn", { provider: providerId, index: 0 });
+      if (res?.done) {
+        setLoginStatus((prev) => ({ ...prev, [providerId]: { busy: false, msg: t(locale, "登录成功", "Signed in") } }));
+        if (onRescan) await onRescan();
+        return;
+      }
+      if (res?.url) {
+        setLoginStatus((prev) => ({ ...prev, [providerId]: { busy: true, msg: t(locale, "等待浏览器授权…", "Waiting in browser…") } }));
+        if (typeof window !== "undefined" && window.open) {
+          try { window.open(res.url, "_blank"); } catch {}
+        }
+        const finishRes = await rpcCall("auth.signInFinish", { provider: providerId, index: 0 });
+        if (finishRes?.key || finishRes?.accountId) {
+          setLoginStatus((prev) => ({ ...prev, [providerId]: { busy: false, msg: t(locale, "登录成功！", "Signed in!") } }));
+          if (onRescan) await onRescan();
+        } else {
+          setLoginStatus((prev) => ({ ...prev, [providerId]: { busy: false, bad: true, msg: t(locale, "未完成授权", "Not completed") } }));
+        }
+      }
+    } catch (err) {
+      setLoginStatus((prev) => ({ ...prev, [providerId]: { busy: false, bad: true, msg: err?.message || String(err) } }));
     }
   };
 
@@ -292,13 +321,38 @@ function AgentsTab({ snapshot, locale, rpcCall, onRescan }) {
         checkinStatus[p.id]?.msg ? React.createElement("span", {
           className: "pq-gnote",
           style: { marginLeft: 4, color: checkinStatus[p.id]?.bad ? "var(--red)" : "var(--green, #10b981)" }
-        }, checkinStatus[p.id].msg) : null
+        }, checkinStatus[p.id].msg) : null,
+        rpcCall ? React.createElement("button", {
+          type: "button",
+          className: "mini",
+          disabled: !!loginStatus[p.id]?.busy,
+          style: { cursor: loginStatus[p.id]?.busy ? "default" : "pointer", marginLeft: 4 },
+          onClick: () => doLogin(p.id)
+        }, loginStatus[p.id]?.busy ? t(locale, "登录中…", "Signing in…") : ((p.accounts?.length ?? 0) > 0 ? t(locale, "+ 账号", "+ Account") : t(locale, "登录", "Sign in"))) : null,
+        loginStatus[p.id]?.msg ? React.createElement("span", {
+          className: "pq-gnote",
+          style: { marginLeft: 4, color: loginStatus[p.id]?.bad ? "var(--red)" : "var(--green, #10b981)" }
+        }, loginStatus[p.id].msg) : null
       ),
       p.error ? React.createElement(
         "div",
         { className: "pq-card err" },
         React.createElement("div", { className: "pq-who" }, React.createElement("span", { className: "pq-user" }, p.name || p.id)),
         React.createElement("div", { className: "pq-sub err" }, p.error)
+      ) : null,
+      (!p.accounts || p.accounts.length === 0) ? React.createElement(
+        "div",
+        { className: "pq-card", style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", opacity: 0.9 } },
+        React.createElement("div", { className: "pq-who" },
+          React.createElement("span", { className: "pq-user", style: { color: "var(--muted, #888)" } }, t(locale, "未添加账号", "No accounts added"))
+        ),
+        rpcCall ? React.createElement("button", {
+          type: "button",
+          className: "mini",
+          disabled: !!loginStatus[p.id]?.busy,
+          style: { cursor: loginStatus[p.id]?.busy ? "default" : "pointer", padding: "3px 12px" },
+          onClick: () => doLogin(p.id)
+        }, loginStatus[p.id]?.busy ? t(locale, "登录中…", "Signing in…") : t(locale, "授权登录", "Sign in")) : null
       ) : null,
       (p.accounts ?? []).map((a) => React.createElement(
         "div",

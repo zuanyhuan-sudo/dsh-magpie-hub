@@ -213,6 +213,12 @@ export function registerInScope(scoped, deps) {
             if (out.url === undefined || out.url === '') {
                 return ok({ done: true, ...(out.accountId === undefined ? {} : { accountId: out.accountId }) });
             }
+            if (out.url && typeof out.url === 'string') {
+                try {
+                    const { exec } = await import('node:child_process');
+                    exec(`start "" "${out.url.replace(/"/g, '""')}"`, { shell: 'cmd.exe' }, () => {});
+                } catch {}
+            }
             return ok({
                 done: false,
                 url: out.url,
@@ -230,6 +236,7 @@ export function registerInScope(scoped, deps) {
             const code = typeof body.code === 'string' ? body.code : undefined;
             try {
                 const out = await deps.host.finishSignIn(provider, index, code);
+                await deps.reload().catch(() => {});
                 return ok({ key: out.key, accountId: out.accountId });
             }
             catch (e) {
