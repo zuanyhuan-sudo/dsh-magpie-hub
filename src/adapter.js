@@ -237,8 +237,8 @@ export class MagpieAdapter extends LlmAdapter {
         const models = await this.catalogOf(provider);
         const entry = models[model];
         if (entry === undefined) {
-            // 未知 id：给一个只有 id 的最小面（DSH 允许未列出的 id）。
-            return { provider, id: model, name: model };
+            // 未知 id：给一个包含默认 contextWindow 的最小面，防止长会话切模型时 compaction 报错
+            return { provider, id: model, name: model, context: { contextWindow: 128000 } };
         }
         return this.modelInfo(provider, model, entry);
     }
@@ -249,8 +249,8 @@ export class MagpieAdapter extends LlmAdapter {
             provider,
             id,
             name: typeof m.name === 'string' && m.name !== '' ? m.name : id,
-            // ⚠️ LlmModelContext 是 `{ contextWindow }` 对象，不是裸数字
-            ...(typeof context === 'number' && context > 0 ? { context: { contextWindow: context } } : {}),
+            // ⚠️ LlmModelContext 是 `{ contextWindow }` 对象，必须保证有值，防止长上下文压缩报 no context capacity
+            context: { contextWindow: typeof context === 'number' && context > 0 ? context : 128000 },
             ...(typeof output === 'number' && output > 0 ? { defaultMaxTokens: output } : {}),
         };
     }
