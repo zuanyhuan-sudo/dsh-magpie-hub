@@ -301,8 +301,16 @@ export class MagpieAdapter extends LlmAdapter {
             accountKey = picked.key;
             const loader = await this.deps.host.loaderOf(provider, picked.key);
             const cfg = this.config(provider);
-            const baseURL = typeof loader.baseURL === 'string' && loader.baseURL !== '' ? loader.baseURL : cfg.api;
-            const sdk = cfg.npm;
+            const models = await this.catalogOf(provider);
+            const entry = models?.[modelId] ?? this.deps.host.providerConfig(provider)?.models?.[modelId];
+            let sdk = entry?.api?.npm;
+            if (!sdk) {
+                const lower = modelId.toLowerCase();
+                if (lower.includes('luna')) sdk = '@ai-sdk/openai';
+                else if (lower.includes('claude') || lower.startsWith('anthropic')) sdk = '@ai-sdk/anthropic';
+                else sdk = cfg.npm;
+            }
+            const baseURL = typeof loader.baseURL === 'string' && loader.baseURL !== '' ? loader.baseURL : (entry?.api?.url || cfg.api);
             const headers = { ...(loader.headers ?? {}) };
             // ⚠ 字段名是 `sessionId`（小写 d）。早先按 `sessionID` 读，一直是
             // undefined，于是回合脚注只能全记在一个桶里、按会话分不开。
